@@ -10,10 +10,17 @@ interface GameBoardProps {
   onGameEnd?: (winner: Player, board: Player[]) => void;
   onMove?: (position: number, player: Player) => void;
   disabled?: boolean;
-  gameKey?: number; // For resetting the game
+  gameKey?: number;
+  difficulty?: 'easy' | 'medium' | 'hard';
 }
 
-export default function GameBoard({ onGameEnd, onMove, disabled = false, gameKey = 0 }: GameBoardProps) {
+export default function GameBoard({
+  onGameEnd,
+  onMove,
+  disabled = false,
+  gameKey = 0,
+  difficulty = 'easy',
+}: GameBoardProps) {
   const [board, setBoard] = useState<Player[]>(Array(9).fill(null));
   const [currentPlayer, setCurrentPlayer] = useState<Player>('X');
   const [gameState, setGameState] = useState<GameState>('playing');
@@ -45,28 +52,89 @@ export default function GameBoard({ onGameEnd, onMove, disabled = false, gameKey
     return { winner: null, line: [] };
   };
 
+  // Minimax algorithm for Hard AI
+  const minimax = (board: Player[], depth: number, isMaximizing: boolean): number => {
+    const { winner } = checkWinner(board);
+    if (winner === 'O') return 10 - depth;
+    if (winner === 'X') return depth - 10;
+    if (board.every(cell => cell !== null)) return 0;
+
+    if (isMaximizing) {
+      let bestScore = -Infinity;
+      board.forEach((cell, i) => {
+        if (cell === null) {
+          board[i] = 'O';
+          const score = minimax(board, depth + 1, false);
+          board[i] = null;
+          bestScore = Math.max(score, bestScore);
+        }
+      });
+      return bestScore;
+    } else {
+      let bestScore = Infinity;
+      board.forEach((cell, i) => {
+        if (cell === null) {
+          board[i] = 'X';
+          const score = minimax(board, depth + 1, true);
+          board[i] = null;
+          bestScore = Math.min(score, bestScore);
+        }
+      });
+      return bestScore;
+    }
+  };
+
   const makeComputerMove = (newBoard: Player[]) => {
     const availableMoves = newBoard
-      .map((cell, index) => cell === null ? index : null)
+      .map((cell, index) => (cell === null ? index : null))
       .filter(val => val !== null) as number[];
 
     if (availableMoves.length === 0) return newBoard;
 
-    // Simple AI: random move for prototype
-    const randomMove = availableMoves[Math.floor(Math.random() * availableMoves.length)];
+    let chosenMove: number;
+
+    if (difficulty === 'easy') {
+      // Random move
+      chosenMove = availableMoves[Math.floor(Math.random() * availableMoves.length)];
+    } else if (difficulty === 'medium') {
+      // 50% smart, 50% random
+      if (Math.random() < 0.5) {
+        chosenMove = availableMoves[Math.floor(Math.random() * availableMoves.length)];
+      } else {
+        chosenMove = getBestMove(newBoard);
+      }
+    } else {
+      // Hard mode → always best move
+      chosenMove = getBestMove(newBoard);
+    }
+
     const computerBoard = [...newBoard];
-    computerBoard[randomMove] = 'O';
-    
-    onMove?.(randomMove, 'O');
+    computerBoard[chosenMove] = 'O';
+    onMove?.(chosenMove, 'O');
     return computerBoard;
+  };
+
+  const getBestMove = (board: Player[]): number => {
+    let bestScore = -Infinity;
+    let move = -1;
+    board.forEach((cell, i) => {
+      if (cell === null) {
+        board[i] = 'O';
+        const score = minimax(board, 0, false);
+        board[i] = null;
+        if (score > bestScore) {
+          bestScore = score;
+          move = i;
+        }
+      }
+    });
+    return move;
   };
 
   const handleCellClick = (index: number) => {
     if (board[index] || gameState !== 'playing' || disabled || currentPlayer !== 'X') {
       return;
     }
-
-    console.log(`Player clicked position ${index}`);
 
     // Player move
     const newBoard = [...board];
@@ -97,7 +165,6 @@ export default function GameBoard({ onGameEnd, onMove, disabled = false, gameKey
       const computerBoard = makeComputerMove(newBoard);
       setBoard(computerBoard);
 
-      // Check for winner after computer move
       const { winner: computerWinner, line: computerLine } = checkWinner(computerBoard);
       if (computerWinner) {
         setWinner(computerWinner);
@@ -107,7 +174,6 @@ export default function GameBoard({ onGameEnd, onMove, disabled = false, gameKey
         return;
       }
 
-      // Check for draw after computer move
       if (computerBoard.every(cell => cell !== null)) {
         setGameState('draw');
         onGameEnd?.(null, computerBoard);
@@ -120,9 +186,9 @@ export default function GameBoard({ onGameEnd, onMove, disabled = false, gameKey
 
   const renderIcon = (player: Player) => {
     if (player === 'X') {
-      return <X className="h-8 w-8 text-primary" data-testid="icon-x" />;
+      return <X className="h-8 w-8 text-primary" />;
     } else if (player === 'O') {
-      return <Circle className="h-8 w-8 text-destructive" data-testid="icon-o" />;
+      return <Circle className="h-8 w-8 text-destructive" />;
     }
     return null;
   };
@@ -130,17 +196,13 @@ export default function GameBoard({ onGameEnd, onMove, disabled = false, gameKey
   return (
     <Card className="p-6 bg-card border-card-border">
       <div className="text-center mb-4">
-        <h2 className="text-xl font-bold text-card-foreground" data-testid="text-game-title">
-          Tic-Tac-Toe
-        </h2>
-        <p className="text-sm text-muted-foreground mt-1" data-testid="text-current-player">
-          {gameState === 'playing' ? (
-            `${currentPlayer === 'X' ? 'Your' : 'Computer\'s'} turn`
-          ) : gameState === 'won' ? (
-            `${winner === 'X' ? 'You' : 'Computer'} won!`
-          ) : (
-            'It\'s a draw!'
-          )}
+        <h2 className="text-xl font-bold text-card-foreground">Tic-Tac-Toe</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          {gameState === 'playing'
+            ? `${currentPlayer === 'X' ? 'Your' : "Computer's"} turn`
+            : gameState === 'won'
+            ? `${winner === 'X' ? 'You' : 'Computer'} won!`
+            : "It's a draw!"}
         </p>
       </div>
 
@@ -150,14 +212,12 @@ export default function GameBoard({ onGameEnd, onMove, disabled = false, gameKey
             key={index}
             variant="outline"
             className={`
-              aspect-square h-20 w-20 p-0 
-              hover-elevate active-elevate-2
+              aspect-square h-20 w-20 p-0
               ${winningLine.includes(index) ? 'bg-primary/10 border-primary' : ''}
               ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
             `}
             onClick={() => handleCellClick(index)}
             disabled={disabled || cell !== null || gameState !== 'playing'}
-            data-testid={`cell-${index}`}
           >
             {renderIcon(cell)}
           </Button>
@@ -166,12 +226,12 @@ export default function GameBoard({ onGameEnd, onMove, disabled = false, gameKey
 
       {gameState !== 'playing' && (
         <div className="text-center mt-4">
-          <p className="text-lg font-semibold text-card-foreground" data-testid="text-game-result">
-            {gameState === 'won' ? (
-              winner === 'X' ? 'Congratulations! You won!' : 'Computer wins this round!'
-            ) : (
-              'It\'s a draw! Good game!'
-            )}
+          <p className="text-lg font-semibold text-card-foreground">
+            {gameState === 'won'
+              ? winner === 'X'
+                ? '🎉 Congratulations! You won!'
+                : '🤖 Computer wins this round!'
+              : "It's a draw! Good game!"}
           </p>
         </div>
       )}

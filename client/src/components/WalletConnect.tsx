@@ -1,13 +1,35 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Wallet, Zap, AlertCircle } from 'lucide-react';
+import { ethers } from 'ethers';
+
+declare global {
+  interface Window {
+    ethereum?: any;
+  }
+}
 
 interface WalletConnectProps {
   onConnect?: (address: string, balance: string) => void;
   onDisconnect?: () => void;
 }
+
+// ZenChain Testnet config
+const ZENCHAIN_TESTNET = {
+  chainId: '0x20d8',  // 8408 decimal
+  chainName: 'ZenChain Testnet',
+  nativeCurrency: {
+    name: 'ZenChain Token',
+    symbol: 'ZTC',
+    decimals: 18,
+  },
+  rpcUrls: ['https://zenchain-testnet.api.onfinality.io/public'],
+  blockExplorerUrls: ['https://zentrace.io'],
+};
+
+
 
 export default function WalletConnect({ onConnect, onDisconnect }: WalletConnectProps) {
   const [isConnected, setIsConnected] = useState(false);
@@ -15,25 +37,58 @@ export default function WalletConnect({ onConnect, onDisconnect }: WalletConnect
   const [balance, setBalance] = useState<string>('0');
   const [isConnecting, setIsConnecting] = useState(false);
   const [networkStatus, setNetworkStatus] = useState<'connected' | 'wrong-network' | 'disconnected'>('disconnected');
+  const [chainId, setChainId] = useState<string>('');
 
-  // Mock connection for prototype
   const handleConnect = async () => {
     setIsConnecting(true);
-    
+
     try {
-      // Simulate wallet connection
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const mockAddress = '0x742d35Cc6659Bc4B6E9D8B4F8D8A9C5E7F6A8B9C';
-      const mockBalance = '15.43';
-      
-      setAddress(mockAddress);
-      setBalance(mockBalance);
+      if (!window.ethereum) {
+        alert('No wallet found! Please install MetaMask or OKX Wallet.');
+        return;
+      }
+
+      // 🔹 1. Ensure ZenChain network
+      try {
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: ZENCHAIN_TESTNET.chainId }],
+        });
+      } catch (switchError: any) {
+        if (switchError.code === 4902) {
+          // Chain not added → add it
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [ZENCHAIN_TESTNET],
+          });
+        } else {
+          throw switchError;
+        }
+      }
+
+      // 🔹 2. Request accounts
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const accounts = await provider.send('eth_requestAccounts', []);
+      const selectedAddress = accounts[0];
+
+      // 🔹 3. Read balance (from ZenChain RPC)
+      const balanceBN = await provider.getBalance(selectedAddress);
+      const balance = ethers.formatEther(balanceBN);
+
+      // 🔹 4. Get chainId and update UI
+      const network = await provider.getNetwork();
+      const currentChainId = `0x${network.chainId.toString(16)}`;
+      setChainId(currentChainId);
+
+      const isOnZenChain = currentChainId === ZENCHAIN_TESTNET.chainId;
+      setNetworkStatus(isOnZenChain ? 'connected' : 'wrong-network');
+
+      setAddress(selectedAddress);
+      setBalance(balance);
       setIsConnected(true);
-      setNetworkStatus('connected');
-      
-      onConnect?.(mockAddress, mockBalance);
-      console.log('Wallet connected successfully');
+
+      onConnect?.(selectedAddress, balance);
+      console.log('Wallet connected successfully:', selectedAddress);
     } catch (error) {
       console.error('Connection failed:', error);
     } finally {
@@ -46,8 +101,20 @@ export default function WalletConnect({ onConnect, onDisconnect }: WalletConnect
     setAddress('');
     setBalance('0');
     setNetworkStatus('disconnected');
+    setChainId('');
     onDisconnect?.();
     console.log('Wallet disconnected');
+  };
+
+  const switchToZenChain = async () => {
+    try {
+      await window.ethereum.request({
+        method: 'wallet_addEthereumChain',
+        params: [ZENCHAIN_TESTNET],
+      });
+    } catch (err) {
+      console.error('Failed to add/switch network:', err);
+    }
   };
 
   const formatAddress = (addr: string) => {
@@ -80,6 +147,16 @@ export default function WalletConnect({ onConnect, onDisconnect }: WalletConnect
               {networkStatus === 'connected' ? 'ZenChain' : 'Wrong Network'}
             </Badge>
             
+            {networkStatus === 'wrong-network' && (
+              <Button 
+                variant="secondary" 
+                size="sm"
+                onClick={switchToZenChain}
+              >
+                Switch to ZenChain
+              </Button>
+            )}
+
             <Button 
               variant="outline" 
               size="sm" 
@@ -121,7 +198,7 @@ export default function WalletConnect({ onConnect, onDisconnect }: WalletConnect
           className="w-full"
           data-testid="button-connect"
         >
-          {isConnecting ? 'Connecting...' : 'Connect MetaMask'}
+          {isConnecting ? 'Connecting...' : 'Connect Wallet'}
         </Button>
       </div>
     </Card>

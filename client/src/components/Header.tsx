@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Gamepad2, Zap, Settings } from 'lucide-react';
+import { Zap, Settings } from 'lucide-react';
+import logo from '../assets/zenchain.png'; // ✅ Correct relative path
 
 interface HeaderProps {
   isWalletConnected: boolean;
@@ -28,15 +29,17 @@ export default function Header({
         <div className="flex items-center justify-between">
           {/* Logo & Title */}
           <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-primary p-2">
-              <Gamepad2 className="h-6 w-6 text-primary-foreground" data-testid="icon-logo" />
-            </div>
+            <img 
+              src={logo} 
+              alt="ZenChain Logo" 
+              className="h-10 w-10 object-contain"
+            />
             <div>
               <h1 className="text-xl font-bold text-foreground" data-testid="text-app-title">
                 ZenChain Tic-Tac-Toe
               </h1>
               <p className="text-xs text-muted-foreground">
-                Play & Earn on Blockchain
+                Developed by @blackjinyt
               </p>
             </div>
           </div>
@@ -44,7 +47,11 @@ export default function Header({
           {/* Wallet Status & Controls */}
           <div className="flex items-center gap-3">
             {/* Network Badge */}
-            <Badge variant="outline" className="hidden sm:flex items-center gap-1" data-testid="badge-network">
+            <Badge 
+              variant="outline" 
+              className="hidden sm:flex items-center gap-1" 
+              data-testid="badge-network"
+            >
               <Zap className="h-3 w-3" />
               ZenChain Testnet
             </Badge>
